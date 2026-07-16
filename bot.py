@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -60,7 +61,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = user_links[user_id]
     choice = query.data
     
-    # Очистка папок
     for folder in [DOWNLOAD_FOLDER, AUDIO_FOLDER]:
         for f in os.listdir(folder):
             try:
@@ -145,14 +145,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in user_links:
             del user_links[user_id]
 
-def main():
+async def main():
+    """Запуск бота"""
     logger.info("Starting bot...")
+    
+    # Используем новый способ создания приложения
     app = Application.builder().token(TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
     logger.info("Bot started!")
-    app.run_polling()
+    
+    # Запускаем бота
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    # Запускаем асинхронно
+    asyncio.run(main())
