@@ -10,15 +10,55 @@ logger = logging.getLogger(__name__)
 
 TOKEN = "8997095280:AAEgfJXENJCoM06wVG5LRVljVs5Y1YntC7w"
 
-DOWNLOAD_FOLDER = "/tmp/downloads"
-AUDIO_FOLDER = "/tmp/audio"
+DOWNLOAD_FOLDER = "downloads"
+AUDIO_FOLDER = "audio"
+COOKIES_FILE = "cookies.txt"
+
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
 user_links = {}
 
+def get_ydl_opts(platform=''):
+    """Настройки с cookies если есть"""
+    opts = {
+        'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+        'quiet': True,
+        'format': 'best',
+        'merge_output_format': 'mp4',
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    }
+    
+    # Добавляем cookies ТОЛЬКО для Instagram
+    if platform == 'instagram' and os.path.exists(COOKIES_FILE):
+        opts['cookiefile'] = COOKIES_FILE
+    
+    return opts
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎥 Привет! Отправь ссылку на видео из Instagram или TikTok")
+    await update.message.reply_text(
+        "🎥 *Бот для скачивания видео и аудио*\n\n"
+        "Отправь ссылку на видео из Instagram или TikTok\n"
+        "и выбери формат.\n\n"
+        "⚠️ Для Instagram загрузи cookies.txt через /help",
+        parse_mode='Markdown'
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔧 *Как скачивать из Instagram без ограничений:*\n\n"
+        "1. Установи расширение 'Get cookies.txt LOCALLY' для Chrome\n"
+        "2. Зайди на instagram.com и войди в аккаунт\n"
+        "3. Экспортируй cookies через расширение\n"
+        "4. Отправь файл cookies.txt сюда\n\n"
+        "После этого Instagram заработает без ограничений!"
+    )
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Принимаем cookies файл"""
+    file = await update.message.document.get_file()
+    await file.download_to_drive(COOKIES_FILE)
+    await update.message.reply_text("✅ Cookies сохранены! Instagram будет работать!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -26,24 +66,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     urls = re.findall(r'https?://[^\s]+', text)
     
     if not urls:
-        await update.message.reply_text("Отправьте ссылку на видео")
+        await update.message.reply_text("📎 Отправь ссылку на видео")
         return
     
     url = urls[0]
+    is_instagram = 'instagram.com' in url.lower()
+    is_tiktok = 'tiktok.com' in url.lower()
     
-    if 'instagram.com' not in url.lower() and 'tiktok.com' not in url.lower():
-        await update.message.reply_text("Только Instagram и TikTok")
+    if not (is_instagram or is_tiktok):
+        await update.message.reply_text("❌ Только Instagram и TikTok")
         return
     
-    user_links[user_id] = url
+    platform = 'instagram' if is_instagram else 'tiktok'
+    user_links[user_id] = {'url': url, 'platform': platform}
     
     keyboard = [
-        [InlineKeyboardButton("🎬 Видео", callback_data="video")],
-        [InlineKeyboardButton("🎵 Аудио MP3", callback_data="audio")]
+        [InlineKeyboardButton("🎬 Скачать видео", callback_data="video")],
+        [InlineKeyboardButton("🎵 Скачать аудио MP3", callback_data="audio")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text("Выберите формат:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "Выбери формат:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -52,10 +97,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     
     if user_id not in user_links:
-        await query.edit_message_text("Ошибка. Отправьте новую ссылку.")
+        await query.edit_message_text("❌ Ссылка устарела. Отправь новую.")
         return
     
-    url = user_links[user_id]
+    data = user_links[user_id]
+    url = data['url']
+    platform = data['platform']
     choice = query.data
     
     for folder in [DOWNLOAD_FOLDER, AUDIO_FOLDER]:
@@ -69,12 +116,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if choice == "video":
             await query.edit_message_text("⏳ Скачиваю видео...")
             
-            ydl_opts = {
-                'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-                'quiet': True,
-                'format': 'best',
-                'merge_output_format': 'mp4',
-            }
+            ydl_opts = get_ydl_opts(platform)
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
@@ -88,7 +130,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if size > 50 * 1024 * 1024:
                     os.remove(video_path)
-                    await query.edit_message_text(f"Файл слишком большой: {size/1024/1024:.1f} MB")
+                    await query.edit_message_text(f"❌ Слишком большой: {size/1024/1024:.1f} MB")
                     return
                 
                 await query.edit_message_text("📤 Отправляю...")
@@ -124,7 +166,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if size > 50 * 1024 * 1024:
                     os.remove(audio_path)
-                    await query.edit_message_text(f"Файл слишком большой: {size/1024/1024:.1f} MB")
+                    await query.edit_message_text(f"❌ Слишком большой: {size/1024/1024:.1f} MB")
                     return
                 
                 await query.edit_message_text("📤 Отправляю...")
@@ -135,18 +177,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove(audio_path)
         
         del user_links[user_id]
-        await query.edit_message_text("✅ Готово! Отправьте новую ссылку.")
+        await query.edit_message_text("✅ Готово! Отправь новую ссылку.")
         
     except Exception as e:
-        await query.edit_message_text(f"❌ Ошибка: {str(e)[:100]}")
+        error_msg = str(e)
+        if "login" in error_msg.lower() or "rate-limit" in error_msg.lower():
+            await query.edit_message_text(
+                "🔒 Instagram требует авторизацию!\n\n"
+                "Отправь /help чтобы узнать как добавить cookies"
+            )
+        else:
+            await query.edit_message_text(f"❌ Ошибка: {error_msg[:150]}")
+        
         if user_id in user_links:
             del user_links[user_id]
 
 if __name__ == '__main__':
-    logger.info("Starting bot...")
+    logger.info("Бот запускается...")
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("Bot started!")
+    logger.info("Бот запущен!")
     app.run_polling()
