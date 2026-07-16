@@ -1,6 +1,5 @@
 import os
 import re
-import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -145,11 +144,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in user_links:
             del user_links[user_id]
 
-async def main():
+def main():
     """Запуск бота"""
     logger.info("Starting bot...")
     
-    # Используем новый способ создания приложения
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -158,9 +156,8 @@ async def main():
     
     logger.info("Bot started!")
     
-    # Запускаем бота
-    await app.run_polling()
+    # Запуск без await - библиотека сама разберётся
+    app.run_polling()
 
 if __name__ == '__main__':
-    # Запускаем асинхронно
-    asyncio.run(main())
+    main()
