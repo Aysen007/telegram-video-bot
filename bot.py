@@ -8,7 +8,6 @@ import yt_dlp
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ВАШ ТОКЕН
 TOKEN = "8997095280:AAEgfJXENJCoM06wVG5LRVljVs5Y1YntC7w"
 
 DOWNLOAD_FOLDER = "/tmp/downloads"
@@ -24,7 +23,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
-    
     urls = re.findall(r'https?://[^\s]+', text)
     
     if not urls:
@@ -144,20 +142,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in user_links:
             del user_links[user_id]
 
-def main():
-    """Запуск бота"""
+if __name__ == '__main__':
     logger.info("Starting bot...")
-    
     app = Application.builder().token(TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
     logger.info("Bot started!")
-    
-    # Запуск без await - библиотека сама разберётся
     app.run_polling()
-
-if __name__ == '__main__':
-    main()
